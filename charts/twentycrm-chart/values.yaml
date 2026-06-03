@@ -12,7 +12,7 @@
 #   redis   -> Deployment + Service   (redis)
 #
 # Non-sensitive env vars are rendered into a ConfigMap; sensitive ones into a
-# Secret (swap in your own via secret.existingSecret).
+# Secret (swap in your own via secret.secretRef / postgresql.auth.secretRef).
 
 # -----------------------------------------------------------------------------
 # Global parameters (shared with any future subcharts)
@@ -173,23 +173,38 @@ config:
 extraEnv: {}
 
 # ---------------------------------------------------------------------------
-# Sensitive environment -> Secret
+# Sensitive environment for the server & worker.
+#
+# Two modes:
+#   1. secretRef (recommended, secret-free values): point at a pre-created
+#      Kubernetes Secret. All sensitive server/worker values are sourced from it
+#      via secretKeyRef - nothing sensitive is read from values or stored in the
+#      release. secretRefKey maps each field to the key inside that Secret.
+#   2. Generated (default, convenient): leave secretRef empty and the chart
+#      creates a Secret from the values below (appSecret/encryptionKey are
+#      auto-generated when blank).
 # ---------------------------------------------------------------------------
 secret:
-  # Use a pre-created Secret instead of generating one from the values below.
-  # The Secret MUST contain: APP_SECRET, ENCRYPTION_KEY, FALLBACK_ENCRYPTION_KEY,
-  # PG_DATABASE_PASSWORD, PG_DATABASE_URL.
-  existingSecret: ""
+  # Name of a pre-created Secret holding APP_SECRET, ENCRYPTION_KEY,
+  # FALLBACK_ENCRYPTION_KEY and PG_DATABASE_URL. When set, the values below are
+  # ignored and nothing sensitive is generated.
+  secretRef: ""
+  # Maps each field to the key inside secretRef (defaults shown). Override only
+  # if your Secret uses different key names.
+  secretRefKey: {}
+  #   appSecret: APP_SECRET
+  #   encryptionKey: ENCRYPTION_KEY
+  #   fallbackEncryptionKey: FALLBACK_ENCRYPTION_KEY
+  #   pgDatabaseUrl: PG_DATABASE_URL
 
-  # APP_SECRET - signs tokens. Leave empty to auto-generate a random value on
-  # first install (persisted across upgrades). Override for a known value.
+  # --- generated mode only (used when secretRef is empty) ---
+  # APP_SECRET - signs tokens. Auto-generated when empty (persisted on upgrade).
   appSecret: ""
   # ENCRYPTION_KEY - encrypts data at rest. Auto-generated when empty.
   encryptionKey: ""
   # FALLBACK_ENCRYPTION_KEY - previous key, used during key rotation.
   fallbackEncryptionKey: ""
-
-  # -- Extra sensitive env vars merged into the Secret, e.g.:
+  # -- Extra sensitive env vars merged into the generated Secret, e.g.:
   #   EMAIL_SMTP_PASSWORD: ...
   #   AUTH_GOOGLE_CLIENT_SECRET: ...
   extraEnv: {}
@@ -205,9 +220,16 @@ postgresql:
     tag: "16"
     pullPolicy: IfNotPresent
   auth:
-    username: postgres   # PG_DATABASE_USER / POSTGRES_USER
-    password: postgres   # PG_DATABASE_PASSWORD / POSTGRES_PASSWORD (-> Secret)
-    database: default    # PG_DATABASE_NAME / POSTGRES_DB
+    username: postgres   # PG_DATABASE_USER / POSTGRES_USER (non-sensitive)
+    database: default    # PG_DATABASE_NAME / POSTGRES_DB (non-sensitive)
+    # Password source. Set secretRef to a pre-created Secret to keep the password
+    # out of values entirely (POSTGRES_PASSWORD is then read via secretKeyRef).
+    secretRef: ""
+    # Maps the password field to the key inside secretRef (default shown).
+    secretRefKey: {}
+    #   password: PG_DATABASE_PASSWORD
+    # Used only when secretRef is empty (generated mode):
+    password: postgres   # PG_DATABASE_PASSWORD / POSTGRES_PASSWORD
   # Hostname override; defaults to the in-cluster db Service when empty.
   host: ""
   port: 5432

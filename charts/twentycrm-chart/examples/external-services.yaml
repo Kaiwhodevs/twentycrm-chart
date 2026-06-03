@@ -9,7 +9,7 @@ config:
 postgresql:
   enabled: false
 externalDatabase:
-  # Written to PG_DATABASE_URL in the generated Secret. With secret.existingSecret,
+  # Written to PG_DATABASE_URL in the generated Secret. With secret.secretRef,
   # set PG_DATABASE_URL in your own Secret instead.
   url: postgres://twenty:CHANGE_ME@my-postgres-host:5432/default
 

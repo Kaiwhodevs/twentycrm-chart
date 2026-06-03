@@ -54,7 +54,7 @@ Artifact Hub:  https://artifacthub.io/packages/helm/twentycrm/twentycrm-chart
 - **Faithful to the docker install** - bundled `postgres:16` and `redis` with the
   same defaults and env vars as the compose file (no opinionated subcharts).
 - **Secrets done right** - sensitive values go to a **Secret** (auto-generated or
-  bring-your-own via `secret.existingSecret`); everything else to a **ConfigMap**.
+  bring-your-own via `secret.secretRef`); everything else to a **ConfigMap**.
 - **Version locked to upstream** - the chart version equals the Twenty release it
   deploys (`v`-prefixed, e.g. `v2.8.3`), kept in sync automatically.
 - **Standard conventions** - `global.*`, `commonLabels/Annotations`, HPA, PDB,
@@ -100,34 +100,60 @@ kubectl port-forward svc/twenty-twentycrm-chart-server 3000:3000
 
 ## Production usage
 
-### Use an existing Secret
+### Secret-free values (`secretRef` + `secretRefKey`)
 
-Keep secrets out of your values/release history by creating the Secret yourself
-(sealed-secrets, External Secrets Operator, `kubectl`, …) and referencing it with
-`secret.existingSecret`. It **must** contain:
+For production, keep **every** secret out of your values and Helm release history.
+Each component that needs secrets supports two fields:
 
-| Key | Description |
-| --- | --- |
-| `APP_SECRET` | Token-signing secret (`openssl rand -base64 32`) |
-| `ENCRYPTION_KEY` | At-rest encryption key (`openssl rand -base64 32`) |
-| `FALLBACK_ENCRYPTION_KEY` | Previous key, used during rotation (may be empty) |
-| `PG_DATABASE_PASSWORD` | Password for the bundled PostgreSQL |
-| `PG_DATABASE_URL` | Full connection string used by server & worker |
+- `secretRef` - the name of a pre-created Kubernetes Secret.
+- `secretRefKey` - a map of `<field>: <key-in-that-secret>` (keys default to the
+  env-var name, so you only set this if your Secret uses different key names).
+
+When `secretRef` is set, the chart sources those values via `secretKeyRef` and
+generates **no** Secret - nothing sensitive ever touches `values.yaml`.
+
+**1. Create the Secrets yourself** (sealed-secrets, External Secrets Operator,
+`kubectl`, …):
 
 ```bash
-kubectl create secret generic twenty-secrets \
+# DB password (consumed by the bundled Postgres as POSTGRES_PASSWORD)
+kubectl create secret generic cod3labs-twenty-db \
+  --from-literal=PG_DATABASE_PASSWORD="$(openssl rand -base64 24)"
+
+# App secrets + the full connection string (consumed by server & worker)
+kubectl create secret generic cod3labs-twenty-secret \
   --from-literal=APP_SECRET="$(openssl rand -base64 32)" \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
   --from-literal=FALLBACK_ENCRYPTION_KEY="" \
-  --from-literal=PG_DATABASE_PASSWORD="$(openssl rand -base64 24)" \
-  --from-literal=PG_DATABASE_URL="postgres://postgres:CHANGE_ME@twenty-twentycrm-chart-db:5432/default"
+  --from-literal=PG_DATABASE_URL="postgres://postgres:THE_SAME_DB_PASSWORD@twenty-twentycrm-chart-db:5432/default"
 ```
 
-> The password in `PG_DATABASE_URL` must equal `PG_DATABASE_PASSWORD`, and the host
-> should be `<release>-twentycrm-chart-db` (or your external database).
+**2. Point the chart at them** - this values file contains no secrets at all
+(see [`examples/secret-free.yaml`](examples/secret-free.yaml)):
 
-Then install with a production values file. A complete one (S3 storage, ingress
-with TLS, HA server, autoscaling, PDB) is provided in
+```yaml
+postgresql:
+  auth:
+    secretRef: cod3labs-twenty-db
+    secretRefKey:
+      password: PG_DATABASE_PASSWORD
+
+secret:
+  secretRef: cod3labs-twenty-secret
+  secretRefKey:
+    appSecret: APP_SECRET
+    encryptionKey: ENCRYPTION_KEY
+    fallbackEncryptionKey: FALLBACK_ENCRYPTION_KEY
+    pgDatabaseUrl: PG_DATABASE_URL
+```
+
+> The password inside `PG_DATABASE_URL` must equal the `PG_DATABASE_PASSWORD` in
+> the DB Secret, and the host should be `<release>-twentycrm-chart-db` (or your
+> external database). The two `secretRef`s may point at the same Secret if you
+> prefer - just put all keys in one.
+
+A complete production values file (S3 storage, ingress + TLS, HA server,
+autoscaling, PDB) using this pattern is in
 [`examples/production.yaml`](examples/production.yaml):
 
 ```bash
@@ -153,7 +179,7 @@ externalRedis:
 ```
 
 > When the chart generates the Secret, `externalDatabase.url` is written to
-> `PG_DATABASE_URL`. With `existingSecret`, set `PG_DATABASE_URL` there directly.
+> `PG_DATABASE_URL`. With `secret.secretRef`, set `PG_DATABASE_URL` in that Secret.
 
 ### Email, OAuth & other integrations
 
@@ -172,7 +198,7 @@ secret:
     AUTH_GOOGLE_CLIENT_SECRET: "..."
 ```
 
-With `existingSecret`, add the sensitive keys to your own Secret instead.
+With `secret.secretRef`, add the sensitive keys to your own Secret instead.
 
 ### File storage
 
@@ -250,11 +276,12 @@ helm uninstall twenty
 | `config.storage.type` | `""` | `STORAGE_TYPE` (`""` = local, `s3`) |
 | `config.storage.s3Region` / `s3Name` / `s3Endpoint` | `""` | S3 storage settings |
 | `extraEnv` | `{}` | Extra non-sensitive env → ConfigMap |
-| `secret.existingSecret` | `""` | Use a pre-created Secret instead of generating one |
-| `secret.appSecret` | `""` | `APP_SECRET` (auto-generated when empty) |
-| `secret.encryptionKey` | `""` | `ENCRYPTION_KEY` (auto-generated when empty) |
-| `secret.fallbackEncryptionKey` | `""` | `FALLBACK_ENCRYPTION_KEY` |
-| `secret.extraEnv` | `{}` | Extra sensitive env → Secret |
+| `secret.secretRef` | `""` | Pre-created Secret for APP_SECRET/ENCRYPTION_KEY/FALLBACK_ENCRYPTION_KEY/PG_DATABASE_URL (secret-free values) |
+| `secret.secretRefKey` | `{}` | Map of `field: keyInSecret` (defaults to the env-var name) |
+| `secret.appSecret` | `""` | `APP_SECRET`, generated mode (auto-generated when empty) |
+| `secret.encryptionKey` | `""` | `ENCRYPTION_KEY`, generated mode (auto-generated when empty) |
+| `secret.fallbackEncryptionKey` | `""` | `FALLBACK_ENCRYPTION_KEY`, generated mode |
+| `secret.extraEnv` | `{}` | Extra sensitive env → generated Secret |
 | `server.replicaCount` | `1` | Server replicas (ignored when autoscaling) |
 | `server.strategy` | `Recreate` | Update strategy (RWO volume → Recreate) |
 | `server.service.type` / `.port` | `ClusterIP` / `3000` | Server Service |
@@ -266,7 +293,10 @@ helm uninstall twenty
 | `server.extraVolumes` / `.extraVolumeMounts` | `[]` | Extra volumes/mounts (also on `worker`) |
 | `worker.replicaCount` | `1` | Worker replicas |
 | `postgresql.enabled` | `true` | Deploy the bundled PostgreSQL |
-| `postgresql.auth.username` / `.password` / `.database` | `postgres` / `postgres` / `default` | DB credentials |
+| `postgresql.auth.username` / `.database` | `postgres` / `default` | DB user / database (non-sensitive) |
+| `postgresql.auth.secretRef` | `""` | Pre-created Secret for the DB password (`POSTGRES_PASSWORD` via secretKeyRef) |
+| `postgresql.auth.secretRefKey` | `{}` | Map `password: keyInSecret` (default `PG_DATABASE_PASSWORD`) |
+| `postgresql.auth.password` | `postgres` | DB password, generated mode (used only when `secretRef` is empty) |
 | `postgresql.persistence.*` | `8Gi`, RWO | DB volume |
 | `externalDatabase.url` | `""` | External `PG_DATABASE_URL` |
 | `redis.enabled` | `true` | Deploy the bundled Redis |

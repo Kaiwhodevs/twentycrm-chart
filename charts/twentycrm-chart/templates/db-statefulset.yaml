@@ -58,8 +58,8 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "twentycrm-chart.secretName" . }}
-                  key: PG_DATABASE_PASSWORD
+                  name: {{ include "twentycrm-chart.dbSecretName" . }}
+                  key: {{ include "twentycrm-chart.dbPasswordKey" . }}
             # Subdirectory so the volume root (which may contain lost+found) does
             # not block initdb.
             - name: PGDATA

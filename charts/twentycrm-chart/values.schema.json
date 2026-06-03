@@ -67,7 +67,8 @@
     "secret": {
       "type": "object",
       "properties": {
-        "existingSecret": { "type": "string" },
+        "secretRef": { "type": "string" },
+        "secretRefKey": { "type": "object" },
         "appSecret": { "type": "string" },
         "encryptionKey": { "type": "string" },
         "fallbackEncryptionKey": { "type": "string" },
@@ -84,7 +85,9 @@
           "properties": {
             "username": { "type": "string" },
             "password": { "type": "string" },
-            "database": { "type": "string" }
+            "database": { "type": "string" },
+            "secretRef": { "type": "string" },
+            "secretRefKey": { "type": "object" }
           }
         },
         "host": { "type": "string" },

@@ -91,15 +91,76 @@ Fully-qualified, in-cluster service hostnames.
 {{- end }}
 
 {{/*
-Name of the Secret to consume - either a user-supplied existing Secret or the
-one this chart generates.
+Name of the generated Secret this chart creates from values.
 */}}
-{{- define "twentycrm-chart.secretName" -}}
-{{- if .Values.secret.existingSecret }}
-{{- tpl .Values.secret.existingSecret . }}
-{{- else }}
+{{- define "twentycrm-chart.generatedSecretName" -}}
 {{- include "twentycrm-chart.fullname" . }}-secret
 {{- end }}
+
+{{/*
+Secret that holds the server/worker sensitive env (APP_SECRET, ENCRYPTION_KEY,
+FALLBACK_ENCRYPTION_KEY, PG_DATABASE_URL): the user-supplied secret.secretRef, or
+the generated Secret.
+*/}}
+{{- define "twentycrm-chart.mainSecretName" -}}
+{{- if .Values.secret.secretRef }}{{ tpl .Values.secret.secretRef . }}{{- else }}{{ include "twentycrm-chart.generatedSecretName" . }}{{- end }}
+{{- end }}
+
+{{/*
+Secret that holds the PostgreSQL password: postgresql.auth.secretRef, or the
+generated Secret.
+*/}}
+{{- define "twentycrm-chart.dbSecretName" -}}
+{{- if .Values.postgresql.auth.secretRef }}{{ tpl .Values.postgresql.auth.secretRef . }}{{- else }}{{ include "twentycrm-chart.generatedSecretName" . }}{{- end }}
+{{- end }}
+
+{{/*
+Key inside the DB secret that holds the password.
+*/}}
+{{- define "twentycrm-chart.dbPasswordKey" -}}
+{{- if .Values.postgresql.auth.secretRef }}{{ (.Values.postgresql.auth.secretRefKey).password | default "PG_DATABASE_PASSWORD" }}{{- else }}PG_DATABASE_PASSWORD{{- end }}
+{{- end }}
+
+{{/*
+Whether the chart needs to generate a Secret from values (i.e. some sensitive
+value is NOT sourced from a pre-existing secretRef).
+Returns "true" or "".
+*/}}
+{{- define "twentycrm-chart.generatesSecret" -}}
+{{- if or (not .Values.secret.secretRef) (and .Values.postgresql.enabled (not .Values.postgresql.auth.secretRef)) (.Values.secret.extraEnv) -}}
+true
+{{- end }}
+{{- end }}
+
+{{/*
+Sensitive env for the server & worker, sourced via secretKeyRef from
+mainSecretName. Keys come from secret.secretRefKey (defaulting to the env-var
+name), so nothing sensitive is read from values.
+*/}}
+{{- define "twentycrm-chart.serverSecretEnv" -}}
+{{- $name := include "twentycrm-chart.mainSecretName" . -}}
+{{- $keys := .Values.secret.secretRefKey | default dict -}}
+- name: APP_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $keys.appSecret | default "APP_SECRET" }}
+- name: ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $keys.encryptionKey | default "ENCRYPTION_KEY" }}
+- name: FALLBACK_ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $keys.fallbackEncryptionKey | default "FALLBACK_ENCRYPTION_KEY" }}
+      optional: true
+- name: PG_DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $keys.pgDatabaseUrl | default "PG_DATABASE_URL" }}
 {{- end }}
 
 {{/*

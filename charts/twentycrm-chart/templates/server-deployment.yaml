@@ -26,7 +26,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- if not .Values.secret.existingSecret }}
+        {{- if include "twentycrm-chart.generatesSecret" . }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
         {{- with .Values.commonAnnotations }}
@@ -83,8 +83,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "twentycrm-chart.configMapName" . }}
-            - secretRef:
-                name: {{ include "twentycrm-chart.secretName" . }}
+          env:
+            {{- include "twentycrm-chart.serverSecretEnv" . | nindent 12 }}
           {{- if .Values.server.startupProbe.enabled }}
           startupProbe:
             {{- omit .Values.server.startupProbe "enabled" | toYaml | nindent 12 }}

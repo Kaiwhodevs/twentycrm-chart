@@ -6,12 +6,16 @@ Components:
   db     : {{ if .Values.postgresql.enabled }}{{ include "twentycrm-chart.dbName" . }} (postgres:{{ .Values.postgresql.image.tag }}){{ else }}external ({{ .Values.externalDatabase.url | default "externalDatabase.url not set!" }}){{ end }}
   redis  : {{ if .Values.redis.enabled }}{{ include "twentycrm-chart.redisName" . }}{{ else }}external ({{ .Values.externalRedis.url | default "externalRedis.url not set!" }}){{ end }}
 
-{{- if not .Values.secret.existingSecret }}
+{{- if .Values.secret.secretRef }}
+
+Sensitive env is sourced from your Secret "{{ tpl .Values.secret.secretRef . }}".
+{{- else }}
 {{- if not .Values.secret.appSecret }}
 
 NOTE: APP_SECRET and ENCRYPTION_KEY were auto-generated and stored in Secret
-"{{ include "twentycrm-chart.fullname" . }}-secret" (preserved across upgrades).
-For production, manage them yourself via secret.existingSecret.
+"{{ include "twentycrm-chart.generatedSecretName" . }}" (preserved across upgrades).
+For a secret-free setup, manage them yourself via secret.secretRef +
+secret.secretRefKey (and postgresql.auth.secretRef for the DB password).
 {{- end }}
 {{- end }}
 
