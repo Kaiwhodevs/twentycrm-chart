@@ -55,11 +55,7 @@ spec:
                 configMapKeyRef:
                   name: {{ include "twentycrm-chart.configMapName" . }}
                   key: POSTGRES_DB
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "twentycrm-chart.dbSecretName" . }}
-                  key: {{ include "twentycrm-chart.dbPasswordKey" . }}
+            {{- include "twentycrm-chart.dbSecretEnv" . | nindent 12 }}
             # Subdirectory so the volume root (which may contain lost+found) does
             # not block initdb.
             - name: PGDATA

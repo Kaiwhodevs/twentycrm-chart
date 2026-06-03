@@ -175,27 +175,37 @@ extraEnv: {}
 # ---------------------------------------------------------------------------
 # Sensitive environment for the server & worker.
 #
+# secretRefKey is an OPEN map of  <ENV_VAR>: <key-in-secret>  - the operator
+# defines exactly which env vars get injected and which Secret key feeds each.
+# There is no hardcoded list in the templates: every entry below is rendered as
+# a secretKeyRef on the server & worker.
+#
+#   * ENV_VAR names are case-sensitive and must match what Twenty expects
+#     (UPPERCASE_WITH_UNDERSCORES).
+#   * The Secret keys use a lowercase convention (app_secret, pg_database_url, …)
+#     so the Secret itself stays clean and readable.
+#
 # Two modes:
-#   1. secretRef (recommended, secret-free values): point at a pre-created
-#      Kubernetes Secret. All sensitive server/worker values are sourced from it
-#      via secretKeyRef - nothing sensitive is read from values or stored in the
-#      release. secretRefKey maps each field to the key inside that Secret.
-#   2. Generated (default, convenient): leave secretRef empty and the chart
-#      creates a Secret from the values below (appSecret/encryptionKey are
-#      auto-generated when blank).
+#   1. secretRef set (recommended, secret-free): every secretRefKey entry is read
+#      from your pre-created Secret via secretKeyRef. Nothing is generated.
+#   2. secretRef empty (default, convenient): the chart generates a Secret using
+#      the secretRefKey keys, auto-filling APP_SECRET / ENCRYPTION_KEY /
+#      FALLBACK_ENCRYPTION_KEY / PG_DATABASE_URL from the values below.
+#
+# Add e.g. SMTP later with zero chart changes:
+#   1. patch the Secret:  kubectl patch secret my-secret --type=merge \
+#        -p '{"stringData":{"email_smtp_password":"..."}}'
+#   2. add one line here:  EMAIL_SMTP_PASSWORD: email_smtp_password  (helm upgrade)
 # ---------------------------------------------------------------------------
 secret:
-  # Name of a pre-created Secret holding APP_SECRET, ENCRYPTION_KEY,
-  # FALLBACK_ENCRYPTION_KEY and PG_DATABASE_URL. When set, the values below are
-  # ignored and nothing sensitive is generated.
+  # Name of a pre-created Secret. Empty -> the chart generates one.
   secretRef: ""
-  # Maps each field to the key inside secretRef (defaults shown). Override only
-  # if your Secret uses different key names.
-  secretRefKey: {}
-  #   appSecret: APP_SECRET
-  #   encryptionKey: ENCRYPTION_KEY
-  #   fallbackEncryptionKey: FALLBACK_ENCRYPTION_KEY
-  #   pgDatabaseUrl: PG_DATABASE_URL
+  # Open map of <ENV_VAR>: <key-in-secret>, injected into server & worker.
+  secretRefKey:
+    APP_SECRET: app_secret
+    ENCRYPTION_KEY: encryption_key
+    FALLBACK_ENCRYPTION_KEY: fallback_encryption_key
+    PG_DATABASE_URL: pg_database_url
 
   # --- generated mode only (used when secretRef is empty) ---
   # APP_SECRET - signs tokens. Auto-generated when empty (persisted on upgrade).
@@ -204,9 +214,9 @@ secret:
   encryptionKey: ""
   # FALLBACK_ENCRYPTION_KEY - previous key, used during key rotation.
   fallbackEncryptionKey: ""
-  # -- Extra sensitive env vars merged into the generated Secret, e.g.:
-  #   EMAIL_SMTP_PASSWORD: ...
-  #   AUTH_GOOGLE_CLIENT_SECRET: ...
+  # -- Extra sensitive env vars (env var name -> value) merged into the generated
+  # Secret and injected into server & worker. For secretRef mode, add the keys to
+  # your Secret and list them in secretRefKey instead.
   extraEnv: {}
 
 # ---------------------------------------------------------------------------
@@ -223,13 +233,13 @@ postgresql:
     username: postgres   # PG_DATABASE_USER / POSTGRES_USER (non-sensitive)
     database: default    # PG_DATABASE_NAME / POSTGRES_DB (non-sensitive)
     # Password source. Set secretRef to a pre-created Secret to keep the password
-    # out of values entirely (POSTGRES_PASSWORD is then read via secretKeyRef).
+    # out of values entirely. Same open-map pattern: <ENV_VAR>: <key-in-secret>,
+    # rendered as a secretKeyRef on the db pod (lowercase Secret key convention).
     secretRef: ""
-    # Maps the password field to the key inside secretRef (default shown).
-    secretRefKey: {}
-    #   password: PG_DATABASE_PASSWORD
+    secretRefKey:
+      POSTGRES_PASSWORD: pg_database_password
     # Used only when secretRef is empty (generated mode):
-    password: postgres   # PG_DATABASE_PASSWORD / POSTGRES_PASSWORD
+    password: postgres   # POSTGRES_PASSWORD
   # Hostname override; defaults to the in-cluster db Service when empty.
   host: ""
   port: 5432

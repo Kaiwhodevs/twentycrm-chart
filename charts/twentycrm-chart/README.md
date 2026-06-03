@@ -103,29 +103,37 @@ kubectl port-forward svc/twenty-twentycrm-chart-server 3000:3000
 ### Secret-free values (`secretRef` + `secretRefKey`)
 
 For production, keep **every** secret out of your values and Helm release history.
-Each component that needs secrets supports two fields:
+Each component that needs secrets supports:
 
 - `secretRef` - the name of a pre-created Kubernetes Secret.
-- `secretRefKey` - a map of `<field>: <key-in-that-secret>` (keys default to the
-  env-var name, so you only set this if your Secret uses different key names).
+- `secretRefKey` - an **open map** of `<ENV_VAR>: <key-in-that-secret>`. Each entry
+  is rendered as a `secretKeyRef` on the server, worker (or db) - there is no
+  hardcoded env-var list, so the operator decides exactly what gets injected.
 
-When `secretRef` is set, the chart sources those values via `secretKeyRef` and
+**Key-naming convention:**
+
+- `ENV_VAR` names are **case-sensitive** and must match what Twenty expects
+  (`UPPERCASE_WITH_UNDERSCORES`).
+- The **Secret keys use lowercase** (`app_secret`, `pg_database_url`, …) so the
+  Secret stays clean and readable; `secretRefKey` maps them to the env vars.
+
+When `secretRef` is set the chart sources those values via `secretKeyRef` and
 generates **no** Secret - nothing sensitive ever touches `values.yaml`.
 
 **1. Create the Secrets yourself** (sealed-secrets, External Secrets Operator,
-`kubectl`, …):
+`kubectl`, …) with lowercase keys:
 
 ```bash
-# DB password (consumed by the bundled Postgres as POSTGRES_PASSWORD)
+# DB password (injected as POSTGRES_PASSWORD)
 kubectl create secret generic cod3labs-twenty-db \
-  --from-literal=PG_DATABASE_PASSWORD="$(openssl rand -base64 24)"
+  --from-literal=pg_database_password="$(openssl rand -base64 24)"
 
-# App secrets + the full connection string (consumed by server & worker)
+# App secrets + the full connection string (server & worker)
 kubectl create secret generic cod3labs-twenty-secret \
-  --from-literal=APP_SECRET="$(openssl rand -base64 32)" \
-  --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  --from-literal=FALLBACK_ENCRYPTION_KEY="" \
-  --from-literal=PG_DATABASE_URL="postgres://postgres:THE_SAME_DB_PASSWORD@twenty-twentycrm-chart-db:5432/default"
+  --from-literal=app_secret="$(openssl rand -base64 32)" \
+  --from-literal=encryption_key="$(openssl rand -base64 32)" \
+  --from-literal=fallback_encryption_key="" \
+  --from-literal=pg_database_url="postgres://postgres:THE_SAME_DB_PASSWORD@twenty-twentycrm-chart-db:5432/default"
 ```
 
 **2. Point the chart at them** - this values file contains no secrets at all
@@ -136,21 +144,35 @@ postgresql:
   auth:
     secretRef: cod3labs-twenty-db
     secretRefKey:
-      password: PG_DATABASE_PASSWORD
+      POSTGRES_PASSWORD: pg_database_password
 
 secret:
   secretRef: cod3labs-twenty-secret
   secretRefKey:
-    appSecret: APP_SECRET
-    encryptionKey: ENCRYPTION_KEY
-    fallbackEncryptionKey: FALLBACK_ENCRYPTION_KEY
-    pgDatabaseUrl: PG_DATABASE_URL
+    APP_SECRET: app_secret
+    ENCRYPTION_KEY: encryption_key
+    FALLBACK_ENCRYPTION_KEY: fallback_encryption_key
+    PG_DATABASE_URL: pg_database_url
 ```
 
-> The password inside `PG_DATABASE_URL` must equal the `PG_DATABASE_PASSWORD` in
+**Adding SMTP (or anything else) later needs no new Secret and no chart change:**
+
+```bash
+# 1. add the key to the existing Secret
+kubectl patch secret cod3labs-twenty-secret --type=merge \
+  -p '{"stringData":{"email_smtp_password":"super-secret"}}'
+```
+```yaml
+# 2. add one line under secret.secretRefKey and `helm upgrade`
+secret:
+  secretRefKey:
+    EMAIL_SMTP_PASSWORD: email_smtp_password
+```
+
+> The password inside `pg_database_url` must equal the `pg_database_password` in
 > the DB Secret, and the host should be `<release>-twentycrm-chart-db` (or your
-> external database). The two `secretRef`s may point at the same Secret if you
-> prefer - just put all keys in one.
+> external database). The two `secretRef`s may point at the same Secret - just put
+> all keys in one.
 
 A complete production values file (S3 storage, ingress + TLS, HA server,
 autoscaling, PDB) using this pattern is in
@@ -276,8 +298,8 @@ helm uninstall twenty
 | `config.storage.type` | `""` | `STORAGE_TYPE` (`""` = local, `s3`) |
 | `config.storage.s3Region` / `s3Name` / `s3Endpoint` | `""` | S3 storage settings |
 | `extraEnv` | `{}` | Extra non-sensitive env → ConfigMap |
-| `secret.secretRef` | `""` | Pre-created Secret for APP_SECRET/ENCRYPTION_KEY/FALLBACK_ENCRYPTION_KEY/PG_DATABASE_URL (secret-free values) |
-| `secret.secretRefKey` | `{}` | Map of `field: keyInSecret` (defaults to the env-var name) |
+| `secret.secretRef` | `""` | Pre-created Secret for server/worker sensitive env (secret-free values) |
+| `secret.secretRefKey` | 4 mappings | **Open map** `<ENV_VAR>: <key-in-secret>` injected as `secretKeyRef`. Default: `APP_SECRET: app_secret`, `ENCRYPTION_KEY: encryption_key`, `FALLBACK_ENCRYPTION_KEY: fallback_encryption_key`, `PG_DATABASE_URL: pg_database_url`. Add a line per extra secret (e.g. `EMAIL_SMTP_PASSWORD: email_smtp_password`) |
 | `secret.appSecret` | `""` | `APP_SECRET`, generated mode (auto-generated when empty) |
 | `secret.encryptionKey` | `""` | `ENCRYPTION_KEY`, generated mode (auto-generated when empty) |
 | `secret.fallbackEncryptionKey` | `""` | `FALLBACK_ENCRYPTION_KEY`, generated mode |
@@ -294,8 +316,8 @@ helm uninstall twenty
 | `worker.replicaCount` | `1` | Worker replicas |
 | `postgresql.enabled` | `true` | Deploy the bundled PostgreSQL |
 | `postgresql.auth.username` / `.database` | `postgres` / `default` | DB user / database (non-sensitive) |
-| `postgresql.auth.secretRef` | `""` | Pre-created Secret for the DB password (`POSTGRES_PASSWORD` via secretKeyRef) |
-| `postgresql.auth.secretRefKey` | `{}` | Map `password: keyInSecret` (default `PG_DATABASE_PASSWORD`) |
+| `postgresql.auth.secretRef` | `""` | Pre-created Secret for the DB password (secret-free) |
+| `postgresql.auth.secretRefKey` | `POSTGRES_PASSWORD: pg_database_password` | **Open map** `<ENV_VAR>: <key-in-secret>` injected on the db pod |
 | `postgresql.auth.password` | `postgres` | DB password, generated mode (used only when `secretRef` is empty) |
 | `postgresql.persistence.*` | `8Gi`, RWO | DB volume |
 | `externalDatabase.url` | `""` | External `PG_DATABASE_URL` |

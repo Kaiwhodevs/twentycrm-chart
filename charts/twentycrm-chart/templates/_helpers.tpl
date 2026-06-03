@@ -115,13 +115,6 @@ generated Secret.
 {{- end }}
 
 {{/*
-Key inside the DB secret that holds the password.
-*/}}
-{{- define "twentycrm-chart.dbPasswordKey" -}}
-{{- if .Values.postgresql.auth.secretRef }}{{ (.Values.postgresql.auth.secretRefKey).password | default "PG_DATABASE_PASSWORD" }}{{- else }}PG_DATABASE_PASSWORD{{- end }}
-{{- end }}
-
-{{/*
 Whether the chart needs to generate a Secret from values (i.e. some sensitive
 value is NOT sourced from a pre-existing secretRef).
 Returns "true" or "".
@@ -133,34 +126,42 @@ true
 {{- end }}
 
 {{/*
-Sensitive env for the server & worker, sourced via secretKeyRef from
-mainSecretName. Keys come from secret.secretRefKey (defaulting to the env-var
-name), so nothing sensitive is read from values.
+Sensitive env for the server & worker. Iterates the OPEN map secret.secretRefKey
+(<ENV_VAR>: <key-in-secret>) and renders one secretKeyRef per entry, sourced from
+mainSecretName. Also injects secret.extraEnv (env var name -> generated key).
+No hardcoded env-var list.
 */}}
 {{- define "twentycrm-chart.serverSecretEnv" -}}
 {{- $name := include "twentycrm-chart.mainSecretName" . -}}
-{{- $keys := .Values.secret.secretRefKey | default dict -}}
-- name: APP_SECRET
+{{- range $envVar, $key := .Values.secret.secretRefKey }}
+- name: {{ $envVar }}
   valueFrom:
     secretKeyRef:
       name: {{ $name }}
-      key: {{ $keys.appSecret | default "APP_SECRET" }}
-- name: ENCRYPTION_KEY
+      key: {{ $key }}
+{{- end }}
+{{- range $envVar, $_ := .Values.secret.extraEnv }}
+- name: {{ $envVar }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "twentycrm-chart.generatedSecretName" $ }}
+      key: {{ $envVar }}
+{{- end }}
+{{- end }}
+
+{{/*
+Sensitive env for the db pod. Iterates the OPEN map postgresql.auth.secretRefKey
+(<ENV_VAR>: <key-in-secret>) sourced from dbSecretName.
+*/}}
+{{- define "twentycrm-chart.dbSecretEnv" -}}
+{{- $name := include "twentycrm-chart.dbSecretName" . -}}
+{{- range $envVar, $key := .Values.postgresql.auth.secretRefKey }}
+- name: {{ $envVar }}
   valueFrom:
     secretKeyRef:
       name: {{ $name }}
-      key: {{ $keys.encryptionKey | default "ENCRYPTION_KEY" }}
-- name: FALLBACK_ENCRYPTION_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ $name }}
-      key: {{ $keys.fallbackEncryptionKey | default "FALLBACK_ENCRYPTION_KEY" }}
-      optional: true
-- name: PG_DATABASE_URL
-  valueFrom:
-    secretKeyRef:
-      name: {{ $name }}
-      key: {{ $keys.pgDatabaseUrl | default "PG_DATABASE_URL" }}
+      key: {{ $key }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -250,9 +251,10 @@ default `helm install` work out of the box (like `docker compose up`).
 {{- if .Values.secret.appSecret }}
 {{- .Values.secret.appSecret }}
 {{- else }}
-{{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (printf "%s-secret" (include "twentycrm-chart.fullname" .)) }}
-{{- if and $existing (index ($existing.data | default dict) "APP_SECRET") }}
-{{- index $existing.data "APP_SECRET" | b64dec }}
+{{- $key := index .Values.secret.secretRefKey "APP_SECRET" | default "app_secret" }}
+{{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (include "twentycrm-chart.generatedSecretName" .) }}
+{{- if and $existing (index ($existing.data | default dict) $key) }}
+{{- index $existing.data $key | b64dec }}
 {{- else }}
 {{- randAlphaNum 32 }}
 {{- end }}
@@ -266,9 +268,10 @@ ENCRYPTION_KEY - same generate-and-persist behaviour as appSecret.
 {{- if .Values.secret.encryptionKey }}
 {{- .Values.secret.encryptionKey }}
 {{- else }}
-{{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (printf "%s-secret" (include "twentycrm-chart.fullname" .)) }}
-{{- if and $existing (index ($existing.data | default dict) "ENCRYPTION_KEY") }}
-{{- index $existing.data "ENCRYPTION_KEY" | b64dec }}
+{{- $key := index .Values.secret.secretRefKey "ENCRYPTION_KEY" | default "encryption_key" }}
+{{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (include "twentycrm-chart.generatedSecretName" .) }}
+{{- if and $existing (index ($existing.data | default dict) $key) }}
+{{- index $existing.data $key | b64dec }}
 {{- else }}
 {{- randAlphaNum 32 }}
 {{- end }}

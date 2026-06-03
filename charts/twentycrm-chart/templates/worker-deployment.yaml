@@ -85,16 +85,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "twentycrm-chart.configMapName" . }}
-            {{- if include "twentycrm-chart.generatesSecret" . }}
-            # Generated Secret: app secrets (generated mode) + secret.extraEnv.
-            - secretRef:
-                name: {{ include "twentycrm-chart.generatedSecretName" . }}
-            {{- end }}
           env:
-            {{- if .Values.secret.secretRef }}
-            # secretRef mode: source app secrets via secretKeyRef (honors custom keys).
+            # Every sensitive env is a secretKeyRef, driven by secret.secretRefKey
+            # (+ secret.extraEnv). No hardcoded env-var list.
             {{- include "twentycrm-chart.serverSecretEnv" . | nindent 12 }}
-            {{- end }}
             # Overrides: these jobs run on the server only (mirrors the compose).
             - name: DISABLE_DB_MIGRATIONS
               value: "true"
