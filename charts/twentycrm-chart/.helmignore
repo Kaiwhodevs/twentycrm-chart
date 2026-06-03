@@ -8,3 +8,5 @@
 *.bak
 *.tmp
 *.orig
+# CI-only test values (kept out of the packaged chart)
+ci/

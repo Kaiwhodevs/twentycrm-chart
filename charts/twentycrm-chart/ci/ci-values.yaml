@@ -1,0 +1,17 @@
+# Values used by automated install tests (e.g. chart-testing / `ct install`).
+# Deterministic secrets and a small footprint so the chart can be installed and
+# smoke-tested in an ephemeral cluster.
+config:
+  serverUrl: http://localhost:3000
+
+secret:
+  appSecret: ci-app-secret-do-not-use-in-prod
+  encryptionKey: ci-encryption-key-do-not-use-in-prod
+
+postgresql:
+  persistence:
+    size: 1Gi
+
+localStorage:
+  persistence:
+    size: 1Gi

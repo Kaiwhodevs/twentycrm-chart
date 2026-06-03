@@ -1,0 +1,12 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Treat chart templates and YAML as text
+*.yaml text
+*.yml text
+*.tpl text
+*.json text
+*.md text
+
+# Packaged charts are binary
+*.tgz binary

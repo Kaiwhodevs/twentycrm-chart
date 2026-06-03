@@ -1,0 +1,20 @@
+# Example: use managed PostgreSQL and Redis instead of the bundled ones.
+#
+#   helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
+#     --version v2.8.0 -f external-services.yaml
+config:
+  serverUrl: https://crm.example.com
+
+# Disable the bundled database and point at a managed instance.
+postgresql:
+  enabled: false
+externalDatabase:
+  # Written to PG_DATABASE_URL in the generated Secret. With secret.existingSecret,
+  # set PG_DATABASE_URL in your own Secret instead.
+  url: postgres://twenty:CHANGE_ME@my-postgres-host:5432/default
+
+# Disable the bundled Redis and point at a managed instance.
+redis:
+  enabled: false
+externalRedis:
+  url: redis://my-redis-host:6379

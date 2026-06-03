@@ -1,0 +1,12 @@
+{
+  // Markdown lint configuration (https://github.com/DavidAnson/markdownlint)
+  "default": true,
+  // Allow long lines (tables, URLs, code).
+  "MD013": false,
+  // Allow inline HTML (badges, callouts).
+  "MD033": false,
+  // Allow duplicate headings in different sections.
+  "MD024": { "siblings_only": true },
+  // First line in file does not need to be a top-level heading.
+  "MD041": false
+}

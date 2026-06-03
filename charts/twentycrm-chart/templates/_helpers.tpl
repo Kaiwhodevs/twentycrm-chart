@@ -91,7 +91,7 @@ Fully-qualified, in-cluster service hostnames.
 {{- end }}
 
 {{/*
-Name of the Secret to consume — either a user-supplied existing Secret or the
+Name of the Secret to consume - either a user-supplied existing Secret or the
 one this chart generates.
 */}}
 {{- define "twentycrm-chart.secretName" -}}
@@ -161,7 +161,7 @@ storageClassName: {{ $sc | quote }}
 {{- end }}
 
 {{/*
-PG_DATABASE_URL — assembled from postgresql.* (mirrors the compose interpolation
+PG_DATABASE_URL - assembled from postgresql.* (mirrors the compose interpolation
 postgres://USER:PASSWORD@HOST:PORT/DATABASE), or taken from externalDatabase.url.
 Sensitive: lives in the Secret.
 */}}
@@ -174,7 +174,7 @@ Sensitive: lives in the Secret.
 {{- end }}
 
 {{/*
-REDIS_URL — default redis://<release>-redis:6379 (mirrors the compose default),
+REDIS_URL - default redis://<release>-redis:6379 (mirrors the compose default),
 or externalRedis.url when set.
 */}}
 {{- define "twentycrm-chart.redisUrl" -}}
@@ -186,7 +186,7 @@ or externalRedis.url when set.
 {{- end }}
 
 {{/*
-APP_SECRET — explicit value, else reuse the value already stored in the
+APP_SECRET - explicit value, else reuse the value already stored in the
 generated Secret (upgrade-stable), else generate a random one. This makes a
 default `helm install` work out of the box (like `docker compose up`).
 */}}
@@ -204,7 +204,7 @@ default `helm install` work out of the box (like `docker compose up`).
 {{- end }}
 
 {{/*
-ENCRYPTION_KEY — same generate-and-persist behaviour as appSecret.
+ENCRYPTION_KEY - same generate-and-persist behaviour as appSecret.
 */}}
 {{- define "twentycrm-chart.encryptionKey" -}}
 {{- if .Values.secret.encryptionKey }}

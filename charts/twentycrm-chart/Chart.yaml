@@ -2,12 +2,12 @@ apiVersion: v2
 name: twentycrm-chart
 description: |
   Twenty CRM (twentyhq/twenty) packaged for Kubernetes. Mirrors the official
-  twenty-docker docker-compose.yml — same services (server, worker, db, redis),
-  same defaults and environment variables — and is distributed via OCI on GHCR.
+  twenty-docker docker-compose.yml - same services (server, worker, db, redis),
+  same defaults and environment variables - and is distributed via OCI on GHCR.
 type: application
 # Chart version tracks the upstream Twenty release tag (v-prefixed, e.g. v2.8.0).
 version: v2.8.0
-# Application version — the twentycrm/twenty image tag deployed by default.
+# Application version - the twentycrm/twenty image tag deployed by default.
 appVersion: v2.8.0
 icon: https://raw.githubusercontent.com/twentyhq/twenty/v2.8.0/packages/twenty-website/public/images/core/logo.svg
 home: https://twenty.com

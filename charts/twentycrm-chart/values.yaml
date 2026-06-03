@@ -1,8 +1,8 @@
 # Default values for twentycrm-chart.
 #
 # This chart mirrors the official Twenty docker-compose
-# (packages/twenty-docker/docker-compose.yml) — same services, same defaults,
-# same environment variables — packaged for Kubernetes. A default
+# (packages/twenty-docker/docker-compose.yml) - same services, same defaults,
+# same environment variables - packaged for Kubernetes. A default
 # `helm install` brings up a working instance out of the box, exactly like
 # `docker compose up`.
 #
@@ -69,7 +69,7 @@ podSecurityContext: {}
 securityContext: {}
 
 # ---------------------------------------------------------------------------
-# server — the Twenty API/app container (compose service "server")
+# server - the Twenty API/app container (compose service "server")
 # ---------------------------------------------------------------------------
 server:
   replicaCount: 1
@@ -134,11 +134,11 @@ server:
   affinity: {}
 
 # ---------------------------------------------------------------------------
-# worker — background jobs (compose service "worker", "yarn worker:prod")
+# worker - background jobs (compose service "worker", "yarn worker:prod")
 # ---------------------------------------------------------------------------
 worker:
   replicaCount: 1
-  # See server.strategy — the worker shares the same RWO local-storage PVC.
+  # See server.strategy - the worker shares the same RWO local-storage PVC.
   strategy:
     type: Recreate
   resources: {}
@@ -154,9 +154,9 @@ worker:
 # Non-sensitive environment -> ConfigMap (server & worker, via envFrom)
 # ---------------------------------------------------------------------------
 config:
-  # SERVER_URL — public URL of this instance, e.g. https://crm.example.com.
+  # SERVER_URL - public URL of this instance, e.g. https://crm.example.com.
   serverUrl: ""
-  # NODE_PORT — port the server listens on.
+  # NODE_PORT - port the server listens on.
   nodePort: 3000
   # Server-only migration/cron toggles. The worker always forces both to "true"
   # (mirrors the compose, where these jobs run on the server only).
@@ -188,12 +188,12 @@ secret:
   # PG_DATABASE_PASSWORD, PG_DATABASE_URL.
   existingSecret: ""
 
-  # APP_SECRET — signs tokens. Leave empty to auto-generate a random value on
+  # APP_SECRET - signs tokens. Leave empty to auto-generate a random value on
   # first install (persisted across upgrades). Override for a known value.
   appSecret: ""
-  # ENCRYPTION_KEY — encrypts data at rest. Auto-generated when empty.
+  # ENCRYPTION_KEY - encrypts data at rest. Auto-generated when empty.
   encryptionKey: ""
-  # FALLBACK_ENCRYPTION_KEY — previous key, used during key rotation.
+  # FALLBACK_ENCRYPTION_KEY - previous key, used during key rotation.
   fallbackEncryptionKey: ""
 
   # -- Extra sensitive env vars merged into the Secret, e.g.:
@@ -202,7 +202,7 @@ secret:
   extraEnv: {}
 
 # ---------------------------------------------------------------------------
-# PostgreSQL — bundled "db" service (postgres:16)
+# PostgreSQL - bundled "db" service (postgres:16)
 # ---------------------------------------------------------------------------
 postgresql:
   enabled: true
@@ -236,7 +236,7 @@ externalDatabase:
   url: ""   # postgres://user:password@host:5432/default
 
 # ---------------------------------------------------------------------------
-# Redis — bundled "redis" service
+# Redis - bundled "redis" service
 # ---------------------------------------------------------------------------
 redis:
   enabled: true
@@ -269,7 +269,7 @@ externalRedis:
 # ---------------------------------------------------------------------------
 # Shared local storage (compose volume "server-local-data", mounted by both
 # server and worker). With STORAGE_TYPE=local both pods share this volume, so on
-# multi-node clusters use a ReadWriteMany storageClass — or switch to S3 storage
+# multi-node clusters use a ReadWriteMany storageClass - or switch to S3 storage
 # (config.storage.type=s3) and disable this.
 # ---------------------------------------------------------------------------
 localStorage:

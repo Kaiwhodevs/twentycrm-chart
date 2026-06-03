@@ -16,6 +16,9 @@ permissions:
   packages: write
   id-token: write   # required for cosign keyless (OIDC) signing
 
+env:
+  CHART_DIR: charts/twentycrm-chart
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -33,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          CHART_VERSION=$(yq '.version' Chart.yaml)
+          CHART_VERSION=$(yq '.version' "$CHART_DIR/Chart.yaml")
           if [ "$TAG" != "$CHART_VERSION" ]; then
             echo "Tag ($TAG) does not match Chart.yaml version ($CHART_VERSION)." >&2
             exit 1
@@ -41,17 +44,17 @@ jobs:
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Lint
-        run: helm lint .
+        run: helm lint "$CHART_DIR"
 
       - name: Package
-        run: helm package . --destination dist
+        run: helm package "$CHART_DIR" --destination dist
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
       - name: Log in to GHCR
         run: |
-          # helm uses its own registry config; cosign reads the docker config —
+          # helm uses its own registry config; cosign reads the docker config -
           # log in to both so the push and the signature both authenticate.
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin

@@ -22,6 +22,9 @@ concurrency:
   group: check-upstream-release
   cancel-in-progress: false
 
+env:
+  CHART_DIR: charts/twentycrm-chart
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -31,7 +34,7 @@ jobs:
           HAS_PAT: ${{ secrets.RELEASE_PAT != '' }}
         run: |
           if [ "$HAS_PAT" = "true" ]; then
-            echo "::notice::RELEASE_PAT is configured — tag pushes will trigger the release workflow."
+            echo "::notice::RELEASE_PAT is configured - tag pushes will trigger the release workflow."
           else
             echo "::warning::RELEASE_PAT is NOT set. Tag pushes will use GITHUB_TOKEN and will NOT trigger release-chart.yml. Add the RELEASE_PAT secret to enable hands-off releases."
           fi
@@ -60,7 +63,7 @@ jobs:
         id: current
         run: |
           set -euo pipefail
-          CURRENT=$(yq '.version' Chart.yaml)
+          CURRENT=$(yq '.version' "$CHART_DIR/Chart.yaml")
           echo "Current chart version: $CURRENT"
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
 
@@ -92,13 +95,13 @@ jobs:
           LATEST: ${{ steps.upstream.outputs.latest }}
         run: |
           set -euo pipefail
-          yq -i ".version = \"${LATEST}\"" Chart.yaml
-          yq -i ".appVersion = \"${LATEST}\"" Chart.yaml
-          yq -i ".image.tag = \"${LATEST}\"" values.yaml
+          yq -i ".version = \"${LATEST}\"" "$CHART_DIR/Chart.yaml"
+          yq -i ".appVersion = \"${LATEST}\"" "$CHART_DIR/Chart.yaml"
+          yq -i ".image.tag = \"${LATEST}\"" "$CHART_DIR/values.yaml"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Chart.yaml values.yaml
+          git add "$CHART_DIR/Chart.yaml" "$CHART_DIR/values.yaml"
           git commit -m "chore: bump Twenty CRM to ${LATEST}"
 
           # Abort if the tag somehow already exists.
