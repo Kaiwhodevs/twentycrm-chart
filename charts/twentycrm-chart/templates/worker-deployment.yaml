@@ -118,9 +118,23 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.worker.affinity }}
+      {{- if .Values.worker.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.worker.affinity | nindent 8 }}
+      {{- else if .Values.localStorage.persistence.enabled }}
+      # Co-locate the worker on the same node as the server so both can mount the
+      # shared ReadWriteOnce local-storage volume. This makes the default work on
+      # any cluster (single- or multi-node) without requiring ReadWriteMany.
+      # Override worker.affinity, or use S3 storage / disable localStorage, to
+      # let the worker schedule freely.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "twentycrm-chart.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: server
       {{- end }}
       {{- with .Values.worker.tolerations }}
       tolerations:

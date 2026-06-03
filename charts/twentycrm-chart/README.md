@@ -177,11 +177,22 @@ With `existingSecret`, add the sensitive keys to your own Secret instead.
 ### File storage
 
 With the default `STORAGE_TYPE=local`, the `server` and `worker` pods share one
-`ReadWriteOnce` PVC (mirroring the compose `server-local-data` volume). That only
-works if both pods land on the same node. For multi-node clusters either:
+`ReadWriteOnce` PVC (mirroring the compose `server-local-data` volume). To make
+this work on **any** cluster out of the box, the worker is scheduled onto the
+**same node** as the server (a pod affinity), so the RWO volume mounts fine on
+single- and multi-node clusters alike - no `ReadWriteMany` required.
 
-- set `localStorage.persistence.accessModes: [ReadWriteMany]` with an RWX class, or
-- **(recommended)** switch to S3 object storage (`config.storage.type=s3`).
+You only need to change this if you want to **scale the server beyond one
+replica** (the RWO volume can't span nodes). In that case either:
+
+- set `localStorage.persistence.accessModes: [ReadWriteMany]` with an RWX storage
+  class (e.g. Longhorn, NFS, CephFS), or
+- **(recommended)** switch to S3 object storage (`config.storage.type=s3`) and set
+  `localStorage.persistence.enabled=false` - then the pods share nothing and can
+  schedule freely.
+
+(The co-location affinity is skipped automatically when `localStorage.persistence`
+is disabled, and can be overridden any time via `worker.affinity`.)
 
 ---
 
