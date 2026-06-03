@@ -48,9 +48,9 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+      {{- if or (eq (include "twentycrm-chart.bundledDb" .) "true") .Values.redis.enabled }}
       initContainers:
-        {{- if .Values.postgresql.enabled }}
+        {{- if eq (include "twentycrm-chart.bundledDb" .) "true" }}
         - name: wait-for-db
           image: {{ include "twentycrm-chart.imageRef" (dict "image" .Values.postgresql.image "tag" .Values.postgresql.image.tag "global" .Values.global) }}
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
@@ -84,9 +84,8 @@ spec:
             - configMapRef:
                 name: {{ include "twentycrm-chart.configMapName" . }}
           env:
-            # Every sensitive env is a secretKeyRef, driven by secret.secretRefKey
-            # (+ secret.extraEnv). Sourced from secret.secretRef or the generated
-            # Secret. No hardcoded env-var list.
+            # App secrets via secretKeyRef + PG_DATABASE_URL (from secret.secretRef,
+            # or assembled at runtime). See helper twentycrm-chart.serverSecretEnv.
             {{- include "twentycrm-chart.serverSecretEnv" . | nindent 12 }}
           {{- if .Values.server.startupProbe.enabled }}
           startupProbe:

@@ -100,79 +100,57 @@ kubectl port-forward svc/twenty-twentycrm-chart-server 3000:3000
 
 ## Production usage
 
-### Secret-free values (`secretRef` + `secretRefKey`)
+### Secret-free values (Supabase-style secret blocks)
 
 For production, keep **every** secret out of your values and Helm release history.
-Each component that needs secrets supports:
+Each secret block supports:
 
-- `secretRef` - the name of a pre-created Kubernetes Secret.
-- `secretRefKey` - an **open map** of `<ENV_VAR>: <key-in-that-secret>`. Each entry
-  is rendered as a `secretKeyRef` on the server, worker (or db) - there is no
-  hardcoded env-var list, so the operator decides exactly what gets injected.
+- the sensitive fields as **empty-string fallbacks** (used only in generated mode),
+- `secretRef` - the name of a pre-created Kubernetes Secret,
+- `secretRefKey` - a map of `<field>: <key-in-that-secret>`.
 
-**Key-naming convention:**
-
-- `ENV_VAR` names are **case-sensitive** and must match what Twenty expects
-  (`UPPERCASE_WITH_UNDERSCORES`).
-- The **Secret keys use lowercase** (`app_secret`, `pg_database_url`, …) so the
-  Secret stays clean and readable; `secretRefKey` maps them to the env vars.
-
-When `secretRef` is set the chart sources those values via `secretKeyRef` and
-generates **no** Secret - nothing sensitive ever touches `values.yaml`.
+When `secretRef` is set, every field is sourced from it via `secretKeyRef` and the
+chart generates **no** Secret. The **field names are fixed** (they map to Twenty's
+env vars internally); the **Secret keys are lowercase** (`app_secret`,
+`database_url`, …) so the Secret stays clean and readable.
 
 **1. Create the Secrets yourself** (sealed-secrets, External Secrets Operator,
 `kubectl`, …) with lowercase keys:
 
 ```bash
-# DB password (injected as POSTGRES_PASSWORD)
-kubectl create secret generic cod3labs-twenty-db \
-  --from-literal=pg_database_password="$(openssl rand -base64 24)"
+# DB password (POSTGRES_PASSWORD + used to build PG_DATABASE_URL)
+kubectl create secret generic twenty-db \
+  --from-literal=database_password="$(openssl rand -base64 24)"
 
 # App secrets + the full connection string (server & worker)
-kubectl create secret generic cod3labs-twenty-secret \
+kubectl create secret generic twenty-secret \
   --from-literal=app_secret="$(openssl rand -base64 32)" \
   --from-literal=encryption_key="$(openssl rand -base64 32)" \
   --from-literal=fallback_encryption_key="" \
-  --from-literal=pg_database_url="postgres://postgres:THE_SAME_DB_PASSWORD@twenty-twentycrm-chart-db:5432/default"
+  --from-literal=database_url="postgres://postgres:THE_SAME_DB_PASSWORD@twenty-twentycrm-chart-db:5432/default"
 ```
 
 **2. Point the chart at them** - this values file contains no secrets at all
 (see [`examples/secret-free.yaml`](examples/secret-free.yaml)):
 
 ```yaml
-postgresql:
-  auth:
-    secretRef: cod3labs-twenty-db
+secret:
+  secretRef: twenty-secret
+  secretRefKey:
+    appSecret: app_secret
+    encryptionKey: encryption_key
+    fallbackEncryptionKey: fallback_encryption_key
+    databaseUrl: database_url
+  db:
+    secretRef: twenty-db
     secretRefKey:
-      POSTGRES_PASSWORD: pg_database_password
-
-secret:
-  secretRef: cod3labs-twenty-secret
-  secretRefKey:
-    APP_SECRET: app_secret
-    ENCRYPTION_KEY: encryption_key
-    FALLBACK_ENCRYPTION_KEY: fallback_encryption_key
-    PG_DATABASE_URL: pg_database_url
+      password: database_password
 ```
 
-**Adding SMTP (or anything else) later needs no new Secret and no chart change:**
-
-```bash
-# 1. add the key to the existing Secret
-kubectl patch secret cod3labs-twenty-secret --type=merge \
-  -p '{"stringData":{"email_smtp_password":"super-secret"}}'
-```
-```yaml
-# 2. add one line under secret.secretRefKey and `helm upgrade`
-secret:
-  secretRefKey:
-    EMAIL_SMTP_PASSWORD: email_smtp_password
-```
-
-> The password inside `pg_database_url` must equal the `pg_database_password` in
-> the DB Secret, and the host should be `<release>-twentycrm-chart-db` (or your
-> external database). The two `secretRef`s may point at the same Secret - just put
-> all keys in one.
+> The password inside `database_url` must equal the `database_password` in the DB
+> Secret, and the host should be `<release>-twentycrm-chart-db` (or your external
+> database). The two `secretRef`s may point at the same Secret - just put all keys
+> in one.
 
 A complete production values file (S3 storage, ingress + TLS, HA server,
 autoscaling, PDB) using this pattern is in
@@ -183,30 +161,37 @@ helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
   --version v2.8.3 -f examples/production.yaml
 ```
 
-### External database / Redis
+### External database (managed PostgreSQL)
 
-Point at managed services instead of the bundled ones (full file:
+Set `externalDatabase.enabled=true` and the bundled `postgresql` is **not** deployed
+(`postgresql.enabled` is ignored). The chart assembles `PG_DATABASE_URL` from the
+non-sensitive fields plus the password from `externalDatabase.secretRef`, injected
+at runtime - the password never touches values or the ConfigMap (full file:
 [`examples/external-services.yaml`](examples/external-services.yaml)):
 
 ```yaml
-postgresql:
-  enabled: false
 externalDatabase:
-  url: postgres://user:password@my-postgres-host:5432/default
+  enabled: true
+  host: my-postgres-host
+  port: 5432
+  database: default
+  user: twenty
+  ssl: true                # appends ?sslmode=require
+  secretRef: twenty-extdb  # required: holds the DB password
+  secretRefKey:
+    password: database_password
 
+# managed Redis
 redis:
   enabled: false
 externalRedis:
   url: redis://my-redis-host:6379
 ```
 
-> When the chart generates the Secret, `externalDatabase.url` is written to
-> `PG_DATABASE_URL`. With `secret.secretRef`, set `PG_DATABASE_URL` in that Secret.
-
 ### Email, OAuth & other integrations
 
-Optional integrations from the upstream compose go through two escape hatches -
-non-sensitive vars into the ConfigMap, secrets into the Secret:
+Non-sensitive integration vars from the upstream compose go into the ConfigMap via
+the top-level `extraEnv`:
 
 ```yaml
 extraEnv:                        # -> ConfigMap
@@ -214,13 +199,13 @@ extraEnv:                        # -> ConfigMap
   EMAIL_DRIVER: smtp
   EMAIL_SMTP_HOST: smtp.example.com
   EMAIL_SMTP_PORT: "465"
-secret:
-  extraEnv:                      # -> Secret
-    EMAIL_SMTP_PASSWORD: "..."
-    AUTH_GOOGLE_CLIENT_SECRET: "..."
 ```
 
-With `secret.secretRef`, add the sensitive keys to your own Secret instead.
+The secret blocks are fixed-field (app secrets + DB password) to mirror the
+Supabase chart, so sensitive integration credentials (e.g. `EMAIL_SMTP_PASSWORD`,
+`AUTH_GOOGLE_CLIENT_SECRET`) are not injected by the chart - manage those with your
+own mechanism (e.g. an `extraDeploy` Secret + a sidecar/env reference), or open an
+issue if you'd like first-class fields added.
 
 ### File storage
 
@@ -298,12 +283,12 @@ helm uninstall twenty
 | `config.storage.type` | `""` | `STORAGE_TYPE` (`""` = local, `s3`) |
 | `config.storage.s3Region` / `s3Name` / `s3Endpoint` | `""` | S3 storage settings |
 | `extraEnv` | `{}` | Extra non-sensitive env → ConfigMap |
-| `secret.secretRef` | `""` | Pre-created Secret for server/worker sensitive env (secret-free values) |
-| `secret.secretRefKey` | 4 mappings | **Open map** `<ENV_VAR>: <key-in-secret>` injected as `secretKeyRef`. Default: `APP_SECRET: app_secret`, `ENCRYPTION_KEY: encryption_key`, `FALLBACK_ENCRYPTION_KEY: fallback_encryption_key`, `PG_DATABASE_URL: pg_database_url`. Add a line per extra secret (e.g. `EMAIL_SMTP_PASSWORD: email_smtp_password`) |
-| `secret.appSecret` | `""` | `APP_SECRET`, generated mode (auto-generated when empty) |
-| `secret.encryptionKey` | `""` | `ENCRYPTION_KEY`, generated mode (auto-generated when empty) |
-| `secret.fallbackEncryptionKey` | `""` | `FALLBACK_ENCRYPTION_KEY`, generated mode |
-| `secret.extraEnv` | `{}` | Extra sensitive env → generated Secret |
+| `secret.appSecret` / `.encryptionKey` / `.fallbackEncryptionKey` | `""` | App secrets (auto-generated when blank, generated mode) |
+| `secret.secretRef` | `""` | Pre-created Secret for app secrets + `database_url` (secret-free) |
+| `secret.secretRefKey` | `appSecret: app_secret`, `encryptionKey: encryption_key`, `fallbackEncryptionKey: fallback_encryption_key`, `databaseUrl: database_url` | Map of `<field>: <key-in-secret>` |
+| `secret.db.password` | `""` | PostgreSQL password (auto-generated when blank, generated mode) |
+| `secret.db.secretRef` | `""` | Pre-created Secret for the DB password (secret-free) |
+| `secret.db.secretRefKey` | `password: database_password` | Map of `<field>: <key-in-secret>` |
 | `server.replicaCount` | `1` | Server replicas (ignored when autoscaling) |
 | `server.strategy` | `Recreate` | Update strategy (RWO volume → Recreate) |
 | `server.service.type` / `.port` | `ClusterIP` / `3000` | Server Service |
@@ -315,12 +300,12 @@ helm uninstall twenty
 | `server.extraVolumes` / `.extraVolumeMounts` | `[]` | Extra volumes/mounts (also on `worker`) |
 | `worker.replicaCount` | `1` | Worker replicas |
 | `postgresql.enabled` | `true` | Deploy the bundled PostgreSQL |
-| `postgresql.auth.username` / `.database` | `postgres` / `default` | DB user / database (non-sensitive) |
-| `postgresql.auth.secretRef` | `""` | Pre-created Secret for the DB password (secret-free) |
-| `postgresql.auth.secretRefKey` | `POSTGRES_PASSWORD: pg_database_password` | **Open map** `<ENV_VAR>: <key-in-secret>` injected on the db pod |
-| `postgresql.auth.password` | `postgres` | DB password, generated mode (used only when `secretRef` is empty) |
+| `postgresql.auth.username` / `.database` | `postgres` / `default` | DB user / database (non-sensitive). Password → `secret.db` |
 | `postgresql.persistence.*` | `8Gi`, RWO | DB volume |
-| `externalDatabase.url` | `""` | External `PG_DATABASE_URL` |
+| `externalDatabase.enabled` | `false` | Use a managed PostgreSQL (ignores `postgresql.enabled`) |
+| `externalDatabase.host` / `.port` / `.database` / `.user` | `""` / `5432` / `default` / `postgres` | Connection fields (non-sensitive) |
+| `externalDatabase.ssl` | `false` | Append `?sslmode=require` |
+| `externalDatabase.secretRef` / `.secretRefKey` | `""` / `password: database_password` | Secret holding the DB password (required when enabled) |
 | `redis.enabled` | `true` | Deploy the bundled Redis |
 | `redis.maxmemoryPolicy` | `noeviction` | Redis `--maxmemory-policy` |
 | `redis.persistence.enabled` | `false` | Persist Redis (becomes a StatefulSet) |

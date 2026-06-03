@@ -20,13 +20,11 @@ data:
   STORAGE_S3_REGION: {{ .Values.config.storage.s3Region | quote }}
   STORAGE_S3_NAME: {{ .Values.config.storage.s3Name | quote }}
   STORAGE_S3_ENDPOINT: {{ .Values.config.storage.s3Endpoint | quote }}
-  # --- postgres container, non-sensitive env ---
-  PG_DATABASE_USER: {{ .Values.postgresql.auth.username | quote }}
-  PG_DATABASE_HOST: {{ include "twentycrm-chart.dbHost" . | quote }}
-  PG_DATABASE_PORT: {{ .Values.postgresql.port | quote }}
-  PG_DATABASE_NAME: {{ .Values.postgresql.auth.database | quote }}
+  {{- if eq (include "twentycrm-chart.bundledDb" .) "true" }}
+  # --- bundled postgres container, non-sensitive env ---
   POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
   POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+  {{- end }}
   {{- with .Values.extraEnv }}
   {{- range $key, $val := . }}
   {{ $key }}: {{ $val | quote }}

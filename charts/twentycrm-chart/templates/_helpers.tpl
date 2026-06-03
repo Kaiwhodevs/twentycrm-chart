@@ -84,7 +84,9 @@ Fully-qualified, in-cluster service hostnames.
 {{- printf "%s.%s.svc.%s" (include "twentycrm-chart.serverName" .) (include "twentycrm-chart.namespace" .) .Values.clusterDomain -}}
 {{- end }}
 {{- define "twentycrm-chart.dbHost" -}}
-{{- if .Values.postgresql.host }}{{ .Values.postgresql.host }}{{- else }}{{ printf "%s.%s.svc.%s" (include "twentycrm-chart.dbName" .) (include "twentycrm-chart.namespace" .) .Values.clusterDomain }}{{- end }}
+{{- if .Values.externalDatabase.enabled }}{{ .Values.externalDatabase.host }}
+{{- else if .Values.postgresql.host }}{{ .Values.postgresql.host }}
+{{- else }}{{ printf "%s.%s.svc.%s" (include "twentycrm-chart.dbName" .) (include "twentycrm-chart.namespace" .) .Values.clusterDomain }}{{- end }}
 {{- end }}
 {{- define "twentycrm-chart.redisHost" -}}
 {{- printf "%s.%s.svc.%s" (include "twentycrm-chart.redisName" .) (include "twentycrm-chart.namespace" .) .Values.clusterDomain -}}
@@ -107,61 +109,106 @@ the generated Secret.
 {{- end }}
 
 {{/*
-Secret that holds the PostgreSQL password: postgresql.auth.secretRef, or the
-generated Secret.
+Are we using an external database? (mutually exclusive with the bundled one.)
 */}}
-{{- define "twentycrm-chart.dbSecretName" -}}
-{{- if .Values.postgresql.auth.secretRef }}{{ tpl .Values.postgresql.auth.secretRef . }}{{- else }}{{ include "twentycrm-chart.generatedSecretName" . }}{{- end }}
+{{- define "twentycrm-chart.bundledDb" -}}
+{{- if and (not .Values.externalDatabase.enabled) .Values.postgresql.enabled }}true{{- end }}
 {{- end }}
 
 {{/*
-Whether the chart needs to generate a Secret from values (i.e. some sensitive
-value is NOT sourced from a pre-existing secretRef).
+Secret + key holding the PostgreSQL password. External DB -> externalDatabase;
+bundled DB -> secret.db (its secretRef or the generated Secret).
+*/}}
+{{- define "twentycrm-chart.dbPasswordSecretName" -}}
+{{- if .Values.externalDatabase.enabled }}{{ tpl (required "externalDatabase.secretRef is required when externalDatabase.enabled is true" .Values.externalDatabase.secretRef) . }}
+{{- else if .Values.secret.db.secretRef }}{{ tpl .Values.secret.db.secretRef . }}
+{{- else }}{{ include "twentycrm-chart.generatedSecretName" . }}{{- end }}
+{{- end }}
+{{- define "twentycrm-chart.dbPasswordKey" -}}
+{{- if .Values.externalDatabase.enabled }}{{ (.Values.externalDatabase.secretRefKey).password | default "database_password" }}
+{{- else }}{{ (.Values.secret.db.secretRefKey).password | default "database_password" }}{{- end }}
+{{- end }}
+
+{{/*
+Assembled connection parameters (external DB or bundled postgres).
+*/}}
+{{- define "twentycrm-chart.dbUser" -}}
+{{- if .Values.externalDatabase.enabled }}{{ .Values.externalDatabase.user }}{{- else }}{{ .Values.postgresql.auth.username }}{{- end }}
+{{- end }}
+{{- define "twentycrm-chart.dbPort" -}}
+{{- if .Values.externalDatabase.enabled }}{{ .Values.externalDatabase.port }}{{- else }}{{ .Values.postgresql.port }}{{- end }}
+{{- end }}
+{{- define "twentycrm-chart.dbDatabase" -}}
+{{- if .Values.externalDatabase.enabled }}{{ .Values.externalDatabase.database }}{{- else }}{{ .Values.postgresql.auth.database }}{{- end }}
+{{- end }}
+{{- define "twentycrm-chart.dbSslParam" -}}
+{{- if and .Values.externalDatabase.enabled .Values.externalDatabase.ssl }}?sslmode=require{{- end }}
+{{- end }}
+
+{{/*
+Whether the chart needs to generate a Secret from values.
 Returns "true" or "".
 */}}
 {{- define "twentycrm-chart.generatesSecret" -}}
-{{- if or (not .Values.secret.secretRef) (and .Values.postgresql.enabled (not .Values.postgresql.auth.secretRef)) (.Values.secret.extraEnv) -}}
+{{- if or (not .Values.secret.secretRef) (and (eq (include "twentycrm-chart.bundledDb" .) "true") (not .Values.secret.db.secretRef)) -}}
 true
 {{- end }}
 {{- end }}
 
 {{/*
-Sensitive env for the server & worker. Iterates the OPEN map secret.secretRefKey
-(<ENV_VAR>: <key-in-secret>) and renders one secretKeyRef per entry, sourced from
-mainSecretName. Also injects secret.extraEnv (env var name -> generated key).
-No hardcoded env-var list.
+Sensitive env for the server & worker. Fixed fields mapped to Twenty's env vars;
+keys come from secret.secretRefKey (lowercase convention). PG_DATABASE_URL is
+read from the Secret in secretRef mode, or assembled at runtime via $(VAR)
+interpolation (password sourced via secretKeyRef, never inlined into values).
 */}}
 {{- define "twentycrm-chart.serverSecretEnv" -}}
 {{- $name := include "twentycrm-chart.mainSecretName" . -}}
-{{- range $envVar, $key := .Values.secret.secretRefKey }}
-- name: {{ $envVar }}
+{{- $rk := .Values.secret.secretRefKey | default dict -}}
+- name: APP_SECRET
   valueFrom:
     secretKeyRef:
       name: {{ $name }}
-      key: {{ $key }}
-{{- end }}
-{{- range $envVar, $_ := .Values.secret.extraEnv }}
-- name: {{ $envVar }}
+      key: {{ $rk.appSecret | default "app_secret" }}
+- name: ENCRYPTION_KEY
   valueFrom:
     secretKeyRef:
-      name: {{ include "twentycrm-chart.generatedSecretName" $ }}
-      key: {{ $envVar }}
+      name: {{ $name }}
+      key: {{ $rk.encryptionKey | default "encryption_key" }}
+- name: FALLBACK_ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $rk.fallbackEncryptionKey | default "fallback_encryption_key" }}
+      optional: true
+{{- if .Values.secret.secretRef }}
+- name: PG_DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ $name }}
+      key: {{ $rk.databaseUrl | default "database_url" }}
+{{- else }}
+{{- if not (or .Values.externalDatabase.enabled (eq (include "twentycrm-chart.bundledDb" .) "true")) }}
+{{- fail "No database configured: enable postgresql, set externalDatabase.enabled, or provide a full URL via secret.secretRef (databaseUrl)." }}
+{{- end }}
+- name: TWENTY_PG_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "twentycrm-chart.dbPasswordSecretName" . }}
+      key: {{ include "twentycrm-chart.dbPasswordKey" . }}
+- name: PG_DATABASE_URL
+  value: {{ printf "postgres://%s:$(TWENTY_PG_PASSWORD)@%s:%v/%s%s" (include "twentycrm-chart.dbUser" .) (include "twentycrm-chart.dbHost" .) (include "twentycrm-chart.dbPort" .) (include "twentycrm-chart.dbDatabase" .) (include "twentycrm-chart.dbSslParam" .) | quote }}
 {{- end }}
 {{- end }}
 
 {{/*
-Sensitive env for the db pod. Iterates the OPEN map postgresql.auth.secretRefKey
-(<ENV_VAR>: <key-in-secret>) sourced from dbSecretName.
+POSTGRES_PASSWORD for the bundled db pod (secretKeyRef -> secret.db).
 */}}
-{{- define "twentycrm-chart.dbSecretEnv" -}}
-{{- $name := include "twentycrm-chart.dbSecretName" . -}}
-{{- range $envVar, $key := .Values.postgresql.auth.secretRefKey }}
-- name: {{ $envVar }}
+{{- define "twentycrm-chart.dbPasswordEnv" -}}
+- name: POSTGRES_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: {{ $name }}
-      key: {{ $key }}
-{{- end }}
+      name: {{ include "twentycrm-chart.dbPasswordSecretName" . }}
+      key: {{ include "twentycrm-chart.dbPasswordKey" . }}
 {{- end }}
 
 {{/*
@@ -216,21 +263,6 @@ storageClassName: {{ $sc | quote }}
 {{- end }}
 
 {{/*
-PG_DATABASE_URL - assembled from postgresql.* (mirrors the compose interpolation
-postgres://USER:PASSWORD@HOST:PORT/DATABASE), or taken from externalDatabase.url.
-Sensitive: lives in the Secret.
-*/}}
-{{- define "twentycrm-chart.databaseUrl" -}}
-{{- if .Values.externalDatabase.url }}
-{{- .Values.externalDatabase.url }}
-{{- else if .Values.postgresql.auth.secretRef }}
-{{- fail "postgresql.auth.secretRef is set, so the chart cannot read the password to assemble PG_DATABASE_URL. Provide the full URL yourself via secret.secretRef (the pgDatabaseUrl key) or externalDatabase.url." }}
-{{- else }}
-{{- printf "postgres://%s:%s@%s:%v/%s" .Values.postgresql.auth.username .Values.postgresql.auth.password (include "twentycrm-chart.dbHost" .) (.Values.postgresql.port | int) .Values.postgresql.auth.database }}
-{{- end }}
-{{- end }}
-
-{{/*
 REDIS_URL - default redis://<release>-redis:6379 (mirrors the compose default),
 or externalRedis.url when set.
 */}}
@@ -251,7 +283,7 @@ default `helm install` work out of the box (like `docker compose up`).
 {{- if .Values.secret.appSecret }}
 {{- .Values.secret.appSecret }}
 {{- else }}
-{{- $key := index .Values.secret.secretRefKey "APP_SECRET" | default "app_secret" }}
+{{- $key := .Values.secret.secretRefKey.appSecret | default "app_secret" }}
 {{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (include "twentycrm-chart.generatedSecretName" .) }}
 {{- if and $existing (index ($existing.data | default dict) $key) }}
 {{- index $existing.data $key | b64dec }}
@@ -268,7 +300,25 @@ ENCRYPTION_KEY - same generate-and-persist behaviour as appSecret.
 {{- if .Values.secret.encryptionKey }}
 {{- .Values.secret.encryptionKey }}
 {{- else }}
-{{- $key := index .Values.secret.secretRefKey "ENCRYPTION_KEY" | default "encryption_key" }}
+{{- $key := .Values.secret.secretRefKey.encryptionKey | default "encryption_key" }}
+{{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (include "twentycrm-chart.generatedSecretName" .) }}
+{{- if and $existing (index ($existing.data | default dict) $key) }}
+{{- index $existing.data $key | b64dec }}
+{{- else }}
+{{- randAlphaNum 32 }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+PostgreSQL password - explicit secret.db.password, else reuse the generated one
+(upgrade-stable), else random.
+*/}}
+{{- define "twentycrm-chart.dbPassword" -}}
+{{- if .Values.secret.db.password }}
+{{- .Values.secret.db.password }}
+{{- else }}
+{{- $key := .Values.secret.db.secretRefKey.password | default "database_password" }}
 {{- $existing := lookup "v1" "Secret" (include "twentycrm-chart.namespace" .) (include "twentycrm-chart.generatedSecretName" .) }}
 {{- if and $existing (index ($existing.data | default dict) $key) }}
 {{- index $existing.data $key | b64dec }}

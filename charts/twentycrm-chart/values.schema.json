@@ -67,12 +67,19 @@
     "secret": {
       "type": "object",
       "properties": {
-        "secretRef": { "type": "string" },
-        "secretRefKey": { "type": "object" },
         "appSecret": { "type": "string" },
         "encryptionKey": { "type": "string" },
         "fallbackEncryptionKey": { "type": "string" },
-        "extraEnv": { "type": "object" }
+        "secretRef": { "type": "string" },
+        "secretRefKey": { "type": "object" },
+        "db": {
+          "type": "object",
+          "properties": {
+            "password": { "type": "string" },
+            "secretRef": { "type": "string" },
+            "secretRefKey": { "type": "object" }
+          }
+        }
       }
     },
     "postgresql": {
@@ -84,10 +91,7 @@
           "type": "object",
           "properties": {
             "username": { "type": "string" },
-            "password": { "type": "string" },
-            "database": { "type": "string" },
-            "secretRef": { "type": "string" },
-            "secretRefKey": { "type": "object" }
+            "database": { "type": "string" }
           }
         },
         "host": { "type": "string" },
@@ -97,7 +101,16 @@
     },
     "externalDatabase": {
       "type": "object",
-      "properties": { "url": { "type": "string" } }
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "port": { "type": ["integer", "string"] },
+        "database": { "type": "string" },
+        "user": { "type": "string" },
+        "ssl": { "type": "boolean" },
+        "secretRef": { "type": "string" },
+        "secretRefKey": { "type": "object" }
+      }
     },
     "redis": {
       "type": "object",

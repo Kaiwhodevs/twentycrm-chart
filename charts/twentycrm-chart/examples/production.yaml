@@ -4,9 +4,9 @@
 #     --from-literal=app_secret="$(openssl rand -base64 32)" \
 #     --from-literal=encryption_key="$(openssl rand -base64 32)" \
 #     --from-literal=fallback_encryption_key="" \
-#     --from-literal=pg_database_url="postgres://postgres:CHANGE_ME@twenty-twentycrm-chart-db:5432/default"
+#     --from-literal=database_url="postgres://postgres:CHANGE_ME@twenty-twentycrm-chart-db:5432/default"
 #   kubectl create secret generic twenty-db \
-#     --from-literal=pg_database_password="CHANGE_ME"   # must match the URL above
+#     --from-literal=database_password="CHANGE_ME"   # must match the URL above
 #
 #   helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
 #     --version v2.8.3 -f production.yaml
@@ -19,20 +19,20 @@ config:
     s3Endpoint: ""   # empty for AWS S3; set for MinIO / R2 / etc.
 
 # No secrets in values - sourced from pre-created Secrets via secretKeyRef.
-# secretRefKey: <ENV_VAR>: <key-in-secret> (lowercase Secret keys).
+# secretRefKey: <field>: <key-in-secret> (lowercase Secret keys).
 secret:
   secretRef: twenty-secret
   secretRefKey:
-    APP_SECRET: app_secret
-    ENCRYPTION_KEY: encryption_key
-    FALLBACK_ENCRYPTION_KEY: fallback_encryption_key
-    PG_DATABASE_URL: pg_database_url
-
-postgresql:
-  auth:
+    appSecret: app_secret
+    encryptionKey: encryption_key
+    fallbackEncryptionKey: fallback_encryption_key
+    databaseUrl: database_url
+  db:
     secretRef: twenty-db
     secretRefKey:
-      POSTGRES_PASSWORD: pg_database_password
+      password: database_password
+
+postgresql:
   persistence:
     size: 20Gi
     storageClass: gp3

@@ -1,4 +1,4 @@
-{{- if .Values.postgresql.enabled }}
+{{- if eq (include "twentycrm-chart.bundledDb" .) "true" }}
 apiVersion: v1
 kind: Service
 metadata:

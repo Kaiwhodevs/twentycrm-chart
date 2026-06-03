@@ -48,7 +48,7 @@ spec:
       {{- end }}
       initContainers:
         # Mirrors the compose: worker depends_on db (healthy) and server (healthy).
-        {{- if .Values.postgresql.enabled }}
+        {{- if eq (include "twentycrm-chart.bundledDb" .) "true" }}
         - name: wait-for-db
           image: {{ include "twentycrm-chart.imageRef" (dict "image" .Values.postgresql.image "tag" .Values.postgresql.image.tag "global" .Values.global) }}
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
@@ -86,8 +86,8 @@ spec:
             - configMapRef:
                 name: {{ include "twentycrm-chart.configMapName" . }}
           env:
-            # Every sensitive env is a secretKeyRef, driven by secret.secretRefKey
-            # (+ secret.extraEnv). No hardcoded env-var list.
+            # App secrets via secretKeyRef + PG_DATABASE_URL (from secret.secretRef,
+            # or assembled at runtime). See helper twentycrm-chart.serverSecretEnv.
             {{- include "twentycrm-chart.serverSecretEnv" . | nindent 12 }}
             # Overrides: these jobs run on the server only (mirrors the compose).
             - name: DISABLE_DB_MIGRATIONS

@@ -1,4 +1,4 @@
-{{- if .Values.postgresql.enabled }}
+{{- if eq (include "twentycrm-chart.bundledDb" .) "true" }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -55,7 +55,7 @@ spec:
                 configMapKeyRef:
                   name: {{ include "twentycrm-chart.configMapName" . }}
                   key: POSTGRES_DB
-            {{- include "twentycrm-chart.dbSecretEnv" . | nindent 12 }}
+            {{- include "twentycrm-chart.dbPasswordEnv" . | nindent 12 }}
             # Subdirectory so the volume root (which may contain lost+found) does
             # not block initdb.
             - name: PGDATA

@@ -173,51 +173,37 @@ config:
 extraEnv: {}
 
 # ---------------------------------------------------------------------------
-# Sensitive environment for the server & worker.
+# Sensitive values (Supabase-style secret blocks).
 #
-# secretRefKey is an OPEN map of  <ENV_VAR>: <key-in-secret>  - the operator
-# defines exactly which env vars get injected and which Secret key feeds each.
-# There is no hardcoded list in the templates: every entry below is rendered as
-# a secretKeyRef on the server & worker.
+# Each block can be supplied two ways:
+#   * generated mode  - leave `secretRef` empty; the chart creates a Secret from
+#     the fields here (appSecret / encryptionKey / db.password are auto-generated
+#     when blank, and persisted across upgrades).
+#   * secretRef mode  - point `secretRef` at a pre-created Secret; every field is
+#     sourced from it via secretKeyRef. Nothing sensitive is stored in values.
 #
-#   * ENV_VAR names are case-sensitive and must match what Twenty expects
-#     (UPPERCASE_WITH_UNDERSCORES).
-#   * The Secret keys use a lowercase convention (app_secret, pg_database_url, …)
-#     so the Secret itself stays clean and readable.
-#
-# Two modes:
-#   1. secretRef set (recommended, secret-free): every secretRefKey entry is read
-#      from your pre-created Secret via secretKeyRef. Nothing is generated.
-#   2. secretRef empty (default, convenient): the chart generates a Secret using
-#      the secretRefKey keys, auto-filling APP_SECRET / ENCRYPTION_KEY /
-#      FALLBACK_ENCRYPTION_KEY / PG_DATABASE_URL from the values below.
-#
-# Add e.g. SMTP later with zero chart changes:
-#   1. patch the Secret:  kubectl patch secret my-secret --type=merge \
-#        -p '{"stringData":{"email_smtp_password":"..."}}'
-#   2. add one line here:  EMAIL_SMTP_PASSWORD: email_smtp_password  (helm upgrade)
+# `secretRefKey` maps each FIELD name to the key inside the Secret. Secret keys
+# use a lowercase convention (app_secret, database_url, …) so the Secret stays
+# clean; the field names are fixed and map to Twenty's env vars internally.
 # ---------------------------------------------------------------------------
 secret:
-  # Name of a pre-created Secret. Empty -> the chart generates one.
+  appSecret: ""              # -> APP_SECRET (auto-generated when blank)
+  encryptionKey: ""          # -> ENCRYPTION_KEY (auto-generated when blank)
+  fallbackEncryptionKey: ""  # -> FALLBACK_ENCRYPTION_KEY
   secretRef: ""
-  # Open map of <ENV_VAR>: <key-in-secret>, injected into server & worker.
   secretRefKey:
-    APP_SECRET: app_secret
-    ENCRYPTION_KEY: encryption_key
-    FALLBACK_ENCRYPTION_KEY: fallback_encryption_key
-    PG_DATABASE_URL: pg_database_url
+    appSecret: app_secret
+    encryptionKey: encryption_key
+    fallbackEncryptionKey: fallback_encryption_key
+    databaseUrl: database_url
 
-  # --- generated mode only (used when secretRef is empty) ---
-  # APP_SECRET - signs tokens. Auto-generated when empty (persisted on upgrade).
-  appSecret: ""
-  # ENCRYPTION_KEY - encrypts data at rest. Auto-generated when empty.
-  encryptionKey: ""
-  # FALLBACK_ENCRYPTION_KEY - previous key, used during key rotation.
-  fallbackEncryptionKey: ""
-  # -- Extra sensitive env vars (env var name -> value) merged into the generated
-  # Secret and injected into server & worker. For secretRef mode, add the keys to
-  # your Secret and list them in secretRefKey instead.
-  extraEnv: {}
+  # PostgreSQL password. Used by the bundled db (POSTGRES_PASSWORD) and to build
+  # PG_DATABASE_URL at runtime. Ignored when externalDatabase.enabled is true.
+  db:
+    password: ""             # auto-generated when blank
+    secretRef: ""
+    secretRefKey:
+      password: database_password
 
 # ---------------------------------------------------------------------------
 # PostgreSQL - bundled "db" service (postgres:16)
@@ -230,16 +216,8 @@ postgresql:
     tag: "16"
     pullPolicy: IfNotPresent
   auth:
-    username: postgres   # PG_DATABASE_USER / POSTGRES_USER (non-sensitive)
-    database: default    # PG_DATABASE_NAME / POSTGRES_DB (non-sensitive)
-    # Password source. Set secretRef to a pre-created Secret to keep the password
-    # out of values entirely. Same open-map pattern: <ENV_VAR>: <key-in-secret>,
-    # rendered as a secretKeyRef on the db pod (lowercase Secret key convention).
-    secretRef: ""
-    secretRefKey:
-      POSTGRES_PASSWORD: pg_database_password
-    # Used only when secretRef is empty (generated mode):
-    password: postgres   # POSTGRES_PASSWORD
+    username: postgres   # POSTGRES_USER (non-sensitive). Password -> secret.db
+    database: default    # POSTGRES_DB   (non-sensitive)
   # Hostname override; defaults to the in-cluster db Service when empty.
   host: ""
   port: 5432
@@ -256,9 +234,20 @@ postgresql:
   tolerations: []
   affinity: {}
 
-# External PostgreSQL: set postgresql.enabled=false and supply a full URL.
+# External PostgreSQL (n8n-style). When enabled, the bundled postgresql is NOT
+# deployed (postgresql.enabled is ignored) and PG_DATABASE_URL is assembled from
+# the non-sensitive fields below plus the password sourced from `secretRef` at
+# runtime - the password never touches values or the ConfigMap.
 externalDatabase:
-  url: ""   # postgres://user:password@host:5432/default
+  enabled: false
+  host: ""
+  port: 5432
+  database: default
+  user: postgres
+  ssl: false               # true -> appends ?sslmode=require
+  secretRef: ""            # required when enabled: holds the DB password
+  secretRefKey:
+    password: database_password
 
 # ---------------------------------------------------------------------------
 # Redis - bundled "redis" service

@@ -1,19 +1,29 @@
-# Example: use managed PostgreSQL and Redis instead of the bundled ones.
+# Example: use a managed PostgreSQL and Redis instead of the bundled ones.
+#
+#   # DB password in a pre-created Secret:
+#   kubectl create secret generic twenty-extdb \
+#     --from-literal=database_password="CHANGE_ME"
 #
 #   helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
 #     --version v2.8.3 -f external-services.yaml
 config:
   serverUrl: https://crm.example.com
 
-# Disable the bundled database and point at a managed instance.
-postgresql:
-  enabled: false
+# Managed PostgreSQL (n8n-style). When enabled, the bundled postgresql is not
+# deployed; PG_DATABASE_URL is assembled from these fields plus the password
+# pulled from secretRef at runtime (never stored in values).
 externalDatabase:
-  # Written to PG_DATABASE_URL in the generated Secret. With secret.secretRef,
-  # set PG_DATABASE_URL in your own Secret instead.
-  url: postgres://twenty:CHANGE_ME@my-postgres-host:5432/default
+  enabled: true
+  host: my-postgres-host
+  port: 5432
+  database: default
+  user: twenty
+  ssl: true                # appends ?sslmode=require
+  secretRef: twenty-extdb
+  secretRefKey:
+    password: database_password
 
-# Disable the bundled Redis and point at a managed instance.
+# Managed Redis: disable the bundled one and supply a URL.
 redis:
   enabled: false
 externalRedis:
