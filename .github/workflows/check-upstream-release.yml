@@ -1,8 +1,13 @@
 name: Check upstream release
 
-# Every 6 hours, look at the latest twentyhq/twenty release. If it is newer than
-# the version this chart currently tracks, bump Chart.yaml + values.yaml, commit,
-# and push a matching v-prefixed git tag. That tag triggers release-chart.yml.
+# Every 6 hours, look at the newest twentycrm/twenty image tag published to Docker
+# Hub. If it is newer than the version this chart currently tracks, bump Chart.yaml
+# + values.yaml, commit, and push a matching v-prefixed git tag. That tag triggers
+# release-chart.yml.
+#
+# We track Docker Hub image tags (not GitHub releases) because the chart deploys
+# those images: Twenty cuts a GitHub release only at vX.Y.0 but publishes patch
+# images (vX.Y.Z) without matching releases, and never published a v2.8.0 image.
 #
 # Requirements:
 #   - A repository secret named RELEASE_PAT (a PAT / fine-grained token with
@@ -45,18 +50,21 @@ jobs:
           token: ${{ secrets.RELEASE_PAT || github.token }}
           fetch-depth: 0
 
-      - name: Determine latest upstream release
+      - name: Determine latest published image tag
         id: upstream
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          LATEST=$(gh api repos/twentyhq/twenty/releases/latest --jq .tag_name)
-          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
-            echo "Could not resolve upstream latest release" >&2
+          # Highest concrete semver tag (vX.Y.Z) actually published as an image.
+          # Moving tags (v2, v2.8) and 'latest' are excluded.
+          LATEST=$(curl -fsSL "https://hub.docker.com/v2/repositories/twentycrm/twenty/tags?page_size=100&ordering=last_updated" \
+            | jq -r '.results[].name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n1)
+          if [ -z "$LATEST" ]; then
+            echo "Could not resolve latest twentycrm/twenty image tag" >&2
             exit 1
           fi
-          echo "Upstream latest: $LATEST"
+          echo "Latest published image: twentycrm/twenty:$LATEST"
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Read current chart version
@@ -98,6 +106,8 @@ jobs:
           yq -i ".version = \"${LATEST}\"" "$CHART_DIR/Chart.yaml"
           yq -i ".appVersion = \"${LATEST}\"" "$CHART_DIR/Chart.yaml"
           yq -i ".image.tag = \"${LATEST}\"" "$CHART_DIR/values.yaml"
+          # Keep the artifacthub.io/images annotation tag in sync.
+          sed -i "s#twentycrm/twenty:v[0-9.]*#twentycrm/twenty:${LATEST}#g" "$CHART_DIR/Chart.yaml"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -5,11 +5,11 @@ description: |
   twenty-docker docker-compose.yml - same services (server, worker, db, redis),
   same defaults and environment variables - and is distributed via OCI on GHCR.
 type: application
-# Chart version tracks the upstream Twenty release tag (v-prefixed, e.g. v2.8.0).
-version: v2.8.0
+# Chart version tracks the upstream Twenty release tag (v-prefixed, e.g. v2.8.3).
+version: v2.8.3
 # Application version - the twentycrm/twenty image tag deployed by default.
-appVersion: v2.8.0
-icon: https://raw.githubusercontent.com/twentyhq/twenty/v2.8.0/packages/twenty-website/public/images/core/logo.svg
+appVersion: v2.8.3
+icon: https://raw.githubusercontent.com/twentyhq/twenty/v2.8.3/packages/twenty-website/public/images/core/logo.svg
 home: https://twenty.com
 sources:
   - https://github.com/twentyhq/twenty
@@ -32,7 +32,7 @@ annotations:
       url: https://github.com/kaiwhodevs/twentycrm-chart
   artifacthub.io/images: |
     - name: twenty
-      image: twentycrm/twenty:v2.8.0
+      image: twentycrm/twenty:v2.8.3
     - name: postgres
       image: postgres:16
     - name: redis

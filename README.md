@@ -18,7 +18,7 @@ Apache-2.0 licensed, cosign signed.
 
 ```bash
 helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
-  --version v2.8.0 \
+  --version v2.8.3 \
   --set config.serverUrl=https://crm.example.com
 ```
 

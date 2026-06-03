@@ -56,7 +56,7 @@ Artifact Hub:  https://artifacthub.io/packages/helm/twentycrm/twentycrm-chart
 - **Secrets done right** - sensitive values go to a **Secret** (auto-generated or
   bring-your-own via `secret.existingSecret`); everything else to a **ConfigMap**.
 - **Version locked to upstream** - the chart version equals the Twenty release it
-  deploys (`v`-prefixed, e.g. `v2.8.0`), kept in sync automatically.
+  deploys (`v`-prefixed, e.g. `v2.8.3`), kept in sync automatically.
 - **Standard conventions** - `global.*`, `commonLabels/Annotations`, HPA, PDB,
   probes, `helm test`, `values.schema.json`, and a **cosign-signed** artifact.
 
@@ -79,7 +79,7 @@ so a default install just works:
 
 ```bash
 helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
-  --version v2.8.0 \
+  --version v2.8.3 \
   --set config.serverUrl=https://crm.example.com
 ```
 
@@ -132,7 +132,7 @@ with TLS, HA server, autoscaling, PDB) is provided in
 
 ```bash
 helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
-  --version v2.8.0 -f examples/production.yaml
+  --version v2.8.3 -f examples/production.yaml
 ```
 
 ### External database / Redis
@@ -191,9 +191,9 @@ The chart version equals the Twenty release it deploys, so upgrading the chart
 upgrades Twenty.
 
 ```bash
-helm show chart oci://ghcr.io/kaiwhodevs/twentycrm-chart --version v2.8.0   # inspect
+helm show chart oci://ghcr.io/kaiwhodevs/twentycrm-chart --version v2.8.3   # inspect
 helm upgrade twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
-  --version v2.8.0 -f examples/production.yaml
+  --version v2.8.3 -f examples/production.yaml
 ```
 
 - **Migrations** run on the server at startup (`DISABLE_DB_MIGRATIONS` empty there,
@@ -231,7 +231,7 @@ helm uninstall twenty
 | `extraDeploy` | `[]` | Extra raw manifests (templated) to deploy |
 | `serviceAccount.create` / `.name` / `.automount` | `true` / `""` / `true` | ServiceAccount settings |
 | `image.registry` / `.repository` | `""` / `twentycrm/twenty` | Server/worker image |
-| `image.tag` | `v2.8.0` | Image tag (falls back to `.Chart.AppVersion`) |
+| `image.tag` | `v2.8.3` | Image tag (falls back to `.Chart.AppVersion`) |
 | `busyboxImage.*` | `busybox:1.36` | Image for wait init-containers & `helm test` |
 | `config.serverUrl` | `""` | `SERVER_URL` - public URL of the instance |
 | `config.nodePort` | `3000` | `NODE_PORT` |
@@ -282,7 +282,7 @@ This chart earns Artifact Hub's quality badges:
 Verify a release before installing:
 
 ```bash
-cosign verify ghcr.io/kaiwhodevs/twentycrm-chart:v2.8.0 \
+cosign verify ghcr.io/kaiwhodevs/twentycrm-chart:v2.8.3 \
   --certificate-identity-regexp '^https://github.com/Kaiwhodevs/twentycrm-chart/.github/workflows/release-chart.yml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -323,7 +323,7 @@ A third workflow, **`publish-artifacthub-metadata.yml`**, publishes
 Cut a release manually any time:
 
 ```bash
-git tag v2.8.0 && git push origin v2.8.0
+git tag v2.8.3 && git push origin v2.8.3
 ```
 
 ---

@@ -43,7 +43,7 @@ helm template twenty charts/twentycrm-chart \
 ## Versioning
 
 The chart version (and `appVersion`) match the upstream Twenty release tag exactly,
-including the leading `v` (for example `v2.8.0`).
+including the leading `v` (for example `v2.8.3`).
 
 ## Pull requests
 

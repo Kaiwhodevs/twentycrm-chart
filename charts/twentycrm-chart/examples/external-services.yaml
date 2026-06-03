@@ -1,7 +1,7 @@
 # Example: use managed PostgreSQL and Redis instead of the bundled ones.
 #
 #   helm install twenty oci://ghcr.io/kaiwhodevs/twentycrm-chart \
-#     --version v2.8.0 -f external-services.yaml
+#     --version v2.8.3 -f external-services.yaml
 config:
   serverUrl: https://crm.example.com
 

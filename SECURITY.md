@@ -11,7 +11,7 @@ Every released chart is:
 Verify a release before installing:
 
 ```bash
-cosign verify ghcr.io/kaiwhodevs/twentycrm-chart:v2.8.0 \
+cosign verify ghcr.io/kaiwhodevs/twentycrm-chart:v2.8.3 \
   --certificate-identity-regexp '^https://github.com/Kaiwhodevs/twentycrm-chart/.github/workflows/release-chart.yml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
